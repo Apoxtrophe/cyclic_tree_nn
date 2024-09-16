@@ -45,6 +45,49 @@ impl Genome {
         self.create_synapse((source_id, target_id));
         self.genes.sort_by_key(|k| k.id)
     }
+    /// Disables a random enabled synapse by changing its flag from [10, 10] to [10, 11]
+    pub fn disable_random_synapse(&mut self) {
+        // Collect indices of all enabled synapses
+        let enabled_synapse_indices: Vec<usize> = self.genes.iter()
+            .enumerate()
+            .filter(|(_, gene)| gene.flag == [10, 10])
+            .map(|(index, _)| index)
+            .collect();
+
+        if enabled_synapse_indices.is_empty() {
+            println!("No enabled synapses to disable.");
+            return;
+        }
+
+        let mut rng = thread_rng();
+        // Select a random enabled synapse
+        let selected_index = enabled_synapse_indices[rng.gen_range(0..enabled_synapse_indices.len())];
+
+        // Disable the synapse
+        self.genes[selected_index].flag = [10, 11];
+        println!("Disabled synapse at index {}", selected_index);
+    }
+    pub fn enable_random_synapse(&mut self) {
+        // Collect indices of all disabled synapses
+        let disabled_synapse_indices: Vec<usize> = self.genes.iter()
+            .enumerate()
+            .filter(|(_, gene)| gene.flag == [10, 11])
+            .map(|(index, _)| index)
+            .collect();
+
+        if disabled_synapse_indices.is_empty() {
+            println!("No disabled synapses to enable.");
+            return;
+        }
+
+        let mut rng = thread_rng();
+        // Select a random disabled synapse
+        let selected_index = disabled_synapse_indices[rng.gen_range(0..disabled_synapse_indices.len())];
+
+        // Enable the synapse
+        self.genes[selected_index].flag = [10, 10];
+        println!("Enabled synapse at index {}", selected_index);
+    }
 }
 
 // HELPER FUNCTIONS
