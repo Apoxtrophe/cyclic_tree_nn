@@ -1,0 +1,26 @@
+Flags [A , B]
+A = 1 ### input
+A = 2 ### hidden
+A = 3 ### output
+
+B = 0 ### no children
+B = 1 ### one child node
+B = 2 ### two child nodes
+
+A = 10 ### synapse
+
+B = 10 ### enabled
+B = 11 ### disabled
+
+
+
+
+
+0. 1    1
+1. 2    3
+2. 4    7
+3. 8    15
+4. 16   31
+5. 32   63
+6. 64   127
+7. 128  255

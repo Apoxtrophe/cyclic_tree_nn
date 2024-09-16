@@ -1,0 +1,17 @@
+[package]
+name = "aster_ml"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rand = "0.8.5"
+base64 = "0.22.1"
+tree_iterators_rs = "1.2.1"
+
+[lib]
+name = "aster_ml"
+path = "src/lib.rs"
+
+[[bin]]
+name = "aster_ml_bin"
+path = "src/main.rs"

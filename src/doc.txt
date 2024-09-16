@@ -1,0 +1,534 @@
+#[derive(Debug)]
+pub enum NeuronType {                                       // Enum for the type of neuron
+    Input,
+    Hidden,
+    Output,
+}
+#[derive(Debug)]
+pub struct Neuron {
+    pub id:usize,                                           // Unique identifiying ID for the neuron
+    pub bias:f32,                                           // Bias value for the neuron
+    pub activation: f32,                                    // Activation value for the neuron
+    pub neuron_type: NeuronType,                            // Type of neuron
+}
+#[derive(Debug)]
+pub struct Synapse {
+    pub input_id: usize,                                    // ID of the input neuron
+    pub output_id: usize,                                   // ID of the output neuron
+    pub weight: f32,                                        // Weight of the synapse
+    pub enabled: bool,                                      // Whether the synapse is enabled
+    pub innovation_number: usize,                           // Unique identifier for the synapse, tracks evolution history
+}
+#[derive(Debug)]
+pub struct Genome {
+    pub num_inputs: usize,                                  // Number of input neurons
+    pub num_outputs: usize,                                 // Number of output neurons
+    pub neurons: Vec<Neuron>,                               // List of neurons
+    pub synapses: Vec<Synapse>,                             // List of synapses
+    pub innovation_counter: usize,                          // Counter for assigning unique innovation numbers
+    pub connection_map: HashMap<(usize, usize), usize>,     // Map synapses to their innovation numbers
+}
+#[derive(Debug)]
+pub struct Individual {
+    pub id: usize,                                          // Unique identifier for the individual
+    pub genome: Genome,                                     // Genome of the individual
+    pub fitness: f32,                                       // Fitness of the individual           
+}
+
+Methods on Genome 
+    new(num_inputs: usize, num_outputs: usize) -> Self:
+        Constructs a new genome with a specified number of input and output neurons.
+        It initializes neurons, creates synapses between input and output neurons, and sets up the innovation counter and connection map.
+        
+    add_neuron(&mut self, split_synapse_index: usize):
+        Adds a hidden neuron by splitting an existing synapse.
+        It disables the original synapse, inserts a new neuron, and creates two new synapses:
+        one from the input neuron to the new hidden neuron and another from the hidden neuron to the output neuron.
+        
+    add_random_neuron(&mut self):
+        Adds a hidden neuron at a random enabled synapse by calling the add_neuron method.
+        It finds a random enabled synapse and splits it to add a new neuron.
+        
+    remove_neuron(&mut self, neuron_id: usize):
+        Removes a neuron and all its associated synapses.
+        It also updates the connection map to ensure there are no references to the removed neuron.
+    
+    add_random_synapse(&mut self):
+        Adds a random synapse between two neurons that do not already have a connection.
+        It selects source and target neurons and attempts to create a new connection up to 20 times to ensure validity.
+        
+    remove_random_synapse(&mut self):
+        Removes a randomly selected disabled synapse from the genome.
+        It also removes any orphan neurons (hidden neurons with no remaining connections).
+        By calling the remove_neuron method, it ensures that the genome remains valid.
+        
+    disable_random_synapse(&mut self):
+        Disables a randomly selected enabled synapse, effectively turning it off but not removing it.
+        
+    enable_random_synapse(&mut self):
+        Enables a randomly selected disabled synapse, turning it back on if it was previously turned off.
+        
+        use std::collections::HashMap;
+use full_palette::{GREY_800};
+use full_palette::GREY_600;
+use plotters::prelude::*;
+use rand::Rng;
+
+const NEURON_ADDITION_RATE: f32 = 0.1;
+const SYNAPSE_ADDITION_RATE: f32 = 0.1;
+const SYNAPSE_REMOVAL_RATE: f32 = 0.1;
+const SYNAPSE_ENABLE_RATE: f32 = 0.1;
+const SYNAPSE_DISABLE_RATE: f32 = 0.1;
+
+
+#[derive(Debug)]
+pub enum NeuronType {                                       // Enum for the type of neuron
+    Input,
+    Hidden,
+    Output,
+}
+#[derive(Debug)]
+pub struct Neuron {
+    pub id:usize,                                           // Unique identifiying ID for the neuron
+    pub bias:f32,                                           // Bias value for the neuron
+    pub activation: f32,                                    // Activation value for the neuron
+    pub neuron_type: NeuronType,                            // Type of neuron
+}
+#[derive(Debug)]
+pub struct Synapse {
+    pub input_id: usize,                                    // ID of the input neuron
+    pub output_id: usize,                                   // ID of the output neuron
+    pub weight: f32,                                        // Weight of the synapse
+    pub enabled: bool,                                      // Whether the synapse is enabled
+    pub innovation_number: usize,                           // Unique identifier for the synapse, tracks evolution history
+}
+#[derive(Debug)]
+pub struct Genome {
+    pub num_inputs: usize,                                  // Number of input neurons
+    pub num_outputs: usize,                                 // Number of output neurons
+    pub neurons: Vec<Neuron>,                               // List of neurons
+    pub synapses: Vec<Synapse>,                             // List of synapses
+    pub innovation_counter: usize,                          // Counter for assigning unique innovation numbers
+    pub connection_map: HashMap<(usize, usize), usize>,     // Map synapses to their innovation numbers
+}
+#[derive(Debug)]
+pub struct Individual {
+    pub id: usize,                                          // Unique identifier for the individual
+    pub genome: Genome,                                     // Genome of the individual
+    pub fitness: f32,                                       // Fitness of the individual           
+}
+impl Genome {
+    pub fn new(                                             // Constructs a new genome with num inputs & outputs          
+        num_inputs: usize,
+        num_outputs: usize
+    ) -> Self {
+        let mut neurons: Vec<Neuron> = Vec::new();
+        let mut synapses: Vec<Synapse> = Vec::new();
+        let mut connection_map: HashMap<(usize, usize), usize> = HashMap::new();
+        let mut innovation_counter = 1;
+        
+        let mut rng = rand::thread_rng();
+        
+        for i in 0..num_inputs {                            // Initialize input neurons    
+            neurons.push(Neuron {
+                id: i,
+                bias: rng.gen_range(-1.0..1.0),
+                activation: 0.0,
+                neuron_type: NeuronType::Input,
+            });
+        }
+
+        for i in 0..num_outputs {                           // Initialize output neurons
+            neurons.push(Neuron {
+                id: i + num_inputs,
+                bias: rng.gen_range(-1.0..1.0),
+                activation: 0.0,
+                neuron_type: NeuronType::Output,
+            });
+        }
+
+        for input_id in 0..num_inputs {                     // Create synapses for every input neuron to every output neuron
+            for output_id in num_inputs..(num_inputs + num_outputs) {
+                synapses.push(Synapse {
+                    input_id,
+                    output_id,
+                    weight: rng.gen_range(-1.0..1.0),
+                    enabled: true,
+                    innovation_number: innovation_counter,
+                });
+                connection_map.insert((input_id, output_id), innovation_counter);
+                innovation_counter += 1;
+            }
+        }
+
+        Self {                                              // Return the newly constructed genome
+            num_inputs,
+            num_outputs,
+            neurons,
+            synapses,
+            innovation_counter,
+            connection_map,
+        }
+    }
+}
+
+impl Individual {
+    pub fn new (
+        id: usize,
+        num_inputs: usize,
+        num_outputs: usize,
+    ) -> Self {
+        let genome = Genome::new(num_inputs, num_outputs);
+        Self {
+            id,
+            genome,
+            fitness: 0.0,
+        }
+    }
+}
+
+// NEURONS
+impl Genome {
+    pub fn add_neuron(&mut self, split_synapse_index: usize) {
+        let mut rng = rand::thread_rng();
+        
+        if split_synapse_index >= self.synapses.len() {
+            return; 
+        }
+
+        let synapse_to_split = &mut self.synapses[split_synapse_index];
+        synapse_to_split.enabled = false;
+
+        // Add the new hidden neuron
+        let new_neuron_id = self.neurons.len();
+        let hidden_neuron = Neuron {
+            id: new_neuron_id,
+            bias: rng.gen_range(-1.0..1.0),
+            activation: 0.0,
+            neuron_type: NeuronType::Hidden,
+        };
+        self.neurons.push(hidden_neuron);
+
+        let input_to_hidden = Synapse {
+            input_id: synapse_to_split.input_id,
+            output_id: new_neuron_id,
+            weight: rng.gen_range(-1.0..1.0),
+            enabled: true,
+            innovation_number: self.innovation_counter,
+        };
+        self.connection_map.insert(
+            (input_to_hidden.input_id, input_to_hidden.output_id),
+            self.innovation_counter,
+        );
+        self.innovation_counter += 1;
+
+        let hidden_to_output = Synapse {
+            input_id: new_neuron_id,
+            output_id: synapse_to_split.output_id,
+            weight: synapse_to_split.weight, 
+            enabled: true,
+            innovation_number: self.innovation_counter,
+        };
+        self.connection_map.insert(
+            (hidden_to_output.input_id, hidden_to_output.output_id),
+            self.innovation_counter,
+        );
+        self.innovation_counter += 1;
+
+        self.synapses.push(input_to_hidden);
+        self.synapses.push(hidden_to_output);
+    }
+    pub fn add_random_neuron(                               // Add a random hidden neuron by splitting an existing synapse
+        &mut self,  
+    ) {
+        if self.synapses.is_empty(){
+            return;
+        }
+        let mut rng = rand::thread_rng();
+        let enabled_synapses: Vec<_> = self
+        .synapses
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.enabled)
+        .collect();
+        
+        if enabled_synapses.is_empty(){
+            return;
+        }
+        
+        let (split_synapse_index, _) = enabled_synapses[rng.gen_range(0..enabled_synapses.len())];
+        self.add_neuron(split_synapse_index);
+    }
+    pub fn remove_neuron(&mut self, neuron_id: usize) {
+        self.neurons.retain(|n| n.id != neuron_id);
+
+        self.synapses
+            .retain(|s| s.input_id != neuron_id && s.output_id != neuron_id);
+        
+        self.connection_map.retain(|&(input, output), _| input != neuron_id && output != neuron_id);
+    }
+}
+
+// SYNAPSES
+impl Genome {
+    pub fn add_random_synapse(&mut self) {                  // Add a random synapse connection between two random neurons
+        let mut rng = rand::thread_rng();
+
+        // Create lists of potential source and target neurons for new connections
+        let possible_sources: Vec<_> = self
+            .neurons
+            .iter()
+            .filter(|n| matches!(n.neuron_type, NeuronType::Input | NeuronType::Hidden))
+            .map(|n| n.id)
+            .collect();
+
+        let possible_targets: Vec<_> = self
+            .neurons
+            .iter()
+            .filter(|n| matches!(n.neuron_type, NeuronType::Hidden | NeuronType::Output))
+            .map(|n| n.id)
+            .collect();
+
+        if possible_sources.is_empty() || possible_targets.is_empty() {
+            return;                                         // No valid neurons to connect
+        }
+
+        // Find a valid new connection that does not already exist
+        let mut attempts = 0;
+        while attempts < 20 {
+            let source_id = possible_sources[rng.gen_range(0..possible_sources.len())];
+            let target_id = possible_targets[rng.gen_range(0..possible_targets.len())];
+            // Check that the connection does not already exist and is not a self-loop
+            if source_id != target_id && !self.connection_map.contains_key(&(source_id, target_id)) {
+                // Add the new synapse with a unique innovation number
+                let new_synapse = Synapse {
+                    input_id: source_id,
+                    output_id: target_id,
+                    weight: rng.gen_range(-1.0..1.0), 
+                    enabled: true,
+                    innovation_number: self.innovation_counter,
+                };
+
+                // Update the connection map and increment the innovation counter
+                self.connection_map.insert((source_id, target_id), self.innovation_counter);
+                self.innovation_counter += 1;
+
+                // Add the new synapse to the genome
+                self.synapses.push(new_synapse);
+                return;
+            }
+            attempts += 1; // Increment attempts if no valid connection was made
+        }
+    }
+    
+    pub fn remove_random_synapse(&mut self) {
+        if self.synapses.is_empty() {
+            println!("No synapses to remove.");
+            return;
+        }
+
+        let mut rng = rand::thread_rng();
+
+        // Collect indices of disabled synapses
+        let disabled_indices: Vec<_> = self
+            .synapses
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| !s.enabled)
+            .map(|(i, _)| i)
+            .collect();
+
+        // Debug: Show how many disabled synapses were found
+        println!("Disabled synapses found: {}", disabled_indices.len());
+
+        // If no disabled synapses, return early
+        if disabled_indices.is_empty() {
+            println!("No disabled synapses to remove.");
+            return;
+        }
+
+        // Select a random index from the disabled synapses
+        let synapse_index = disabled_indices[rng.gen_range(0..disabled_indices.len())];
+        let synapse_to_remove = &self.synapses[synapse_index];
+
+        // Remove the synapse from the connection map and the synapses vector
+        println!(
+            "Removing disabled synapse from {} to {}.",
+            synapse_to_remove.input_id, synapse_to_remove.output_id
+        );
+        self.connection_map
+            .remove(&(synapse_to_remove.input_id, synapse_to_remove.output_id));
+        self.synapses.remove(synapse_index);
+
+        // Check and remove neurons that no longer have any connections
+        let mut orphan_neurons = vec![];
+
+        // Find neurons with no remaining input or output connections
+        for neuron in &self.neurons {
+            let is_orphan = !self
+                .synapses
+                .iter()
+                .any(|s| s.input_id == neuron.id || s.output_id == neuron.id);
+
+            if is_orphan && matches!(neuron.neuron_type, NeuronType::Hidden) {
+                orphan_neurons.push(neuron.id);
+                println!("Found orphan neuron with ID: {}", neuron.id);
+            }
+        }
+
+        // Remove orphan neurons
+        for neuron_id in orphan_neurons {
+            println!("Removing orphan neuron with ID: {}", neuron_id);
+            self.remove_neuron(neuron_id);
+        }
+    }
+    pub fn disable_random_synapse(&mut self) {
+        let mut rng = rand::thread_rng();
+
+        // Collect indices of enabled synapses
+        let enabled_indices: Vec<_> = self
+            .synapses
+            .iter_mut()
+            .enumerate()
+            .filter(|(_, s)| s.enabled)
+            .map(|(i, _)| i)
+            .collect();
+
+        // If no enabled synapses, return early
+        if enabled_indices.is_empty() {
+            return;
+        }
+
+        // Select a random index and disable the corresponding synapse
+        let index = enabled_indices[rng.gen_range(0..enabled_indices.len())];
+        self.synapses[index].enabled = false;
+    }
+    pub fn enable_random_synapse(&mut self) {
+        let mut rng = rand::thread_rng();
+
+        // Collect indices of disabled synapses
+        let disabled_indices: Vec<_> = self
+            .synapses
+            .iter_mut()
+            .enumerate()
+            .filter(|(_, s)| !s.enabled)
+            .map(|(i, _)| i)
+            .collect();
+
+        // If no disabled synapses, return early
+        if disabled_indices.is_empty() {
+            return;
+        }
+
+        // Select a random index and enable the corresponding synapse
+        let index = disabled_indices[rng.gen_range(0..disabled_indices.len())];
+        self.synapses[index].enabled = true;
+    }
+}
+
+// DIAGNOSTICS
+impl Genome {
+    pub fn diagnostics(&self) {
+        let input_count = self.neurons.iter().filter(|n| matches!(n.neuron_type, NeuronType::Input)).count();
+        let output_count = self.neurons.iter().filter(|n| matches!(n.neuron_type, NeuronType::Output)).count();
+        let hidden_count = self.neurons.iter().filter(|n| matches!(n.neuron_type, NeuronType::Hidden)).count();
+        
+        let enabled_synapses = self.synapses.iter().filter(|s| s.enabled).count();
+        let disabled_synapses = self.synapses.len() - enabled_synapses;
+    
+        println!("=== Network Diagnostics ===");
+        println!("[{}] ## Inputs Neurons: {} ## Output Neurons: {} ## Hidden Neurons: {}", self.neurons.len(), input_count, output_count, hidden_count);
+        println!("[{}] ## Enabled Synapses: {} ## Disabled Synapses: {}", self.synapses.len() ,enabled_synapses, disabled_synapses);
+        println!("===========================\n");
+    }
+    pub fn visualize(&self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let root_area = BitMapBackend::new(filename, (800, 600)).into_drawing_area();
+        root_area.fill(&WHITE)?;
+    
+        let mut chart = ChartBuilder::on(&root_area)
+            .caption("Neural Network", ("sans-serif", 40))
+            .build_cartesian_2d(-10..110, -10..110)?;
+    
+        let mut rng = rand::thread_rng();
+        let mut hidden_positions = HashMap::new(); // Store positions of hidden neurons by their IDs
+    
+        // Drawing Neurons
+        for neuron in &self.neurons {
+            let (x, y) = match neuron.neuron_type {
+                NeuronType::Input => (10, neuron.id as i32 * 10 + 20), // Inputs on the left side
+                NeuronType::Output => (neuron.id as i32 * 10 + 20, 10), // Outputs at the bottom
+                NeuronType::Hidden => {
+                    // Random position within specified bounds for hidden neurons
+                    loop {
+                        let x = rng.gen_range(40..60);
+                        let y = rng.gen_range(40..60);
+                        // Check for non-overlapping
+                        if hidden_positions.values().all(|&(hx, hy)| ((hx as i32 - x).pow(2) + (hy as i32 - y).pow(2)) >= 100) {
+                            hidden_positions.insert(neuron.id, (x, y));
+                            break (x, y);
+                        }
+                    }
+                }
+            };
+    
+            // Draw neuron
+            chart.draw_series(std::iter::once(Circle::new((x, y), 10, ShapeStyle {
+                color: GREEN.to_rgba(),
+                filled: true,
+                stroke_width: 1,
+            })))?;
+    
+            // Display neuron ID and bias
+            chart.draw_series(std::iter::once(Text::new(
+                format!("N{}: B{:.2}", neuron.id, neuron.bias),
+                (x + 5, y + 5),
+                ("sans-serif", 15).into_font(),
+            )))?;
+        }
+    
+        // Drawing Synapses
+        for synapse in &self.synapses {
+            let input_neuron = &self.neurons[synapse.input_id];
+            let output_neuron = &self.neurons[synapse.output_id];
+    
+            let (x1, y1) = match input_neuron.neuron_type {
+                NeuronType::Input => (10, input_neuron.id as i32 * 10 + 20),
+                NeuronType::Output => (input_neuron.id as i32 * 10 + 20, 10),
+                NeuronType::Hidden => *hidden_positions.get(&input_neuron.id).expect("Hidden neuron not found"),
+            };
+    
+            let (x2, y2) = match output_neuron.neuron_type {
+                NeuronType::Input => (10, output_neuron.id as i32 * 10 + 20),
+                NeuronType::Output => (output_neuron.id as i32 * 10 + 20, 10),
+                NeuronType::Hidden => *hidden_positions.get(&output_neuron.id).expect("Hidden neuron not found"),
+            };
+    
+            // Define synapse color and style based on weight
+            let line_color = if synapse.weight > 0.0 { &BLUE } else { &RED };
+            let line_width = (synapse.weight.abs() * 4.0).clamp(1.0, 4.0) as u32; // Adjust width based on weight
+    
+            // Draw synapse with line width adjusted for weight
+            chart.draw_series(std::iter::once(PathElement::new(
+                vec![(x1, y1), (x2, y2)],
+                ShapeStyle {
+                    color: line_color.to_rgba(),
+                    filled: false,
+                    stroke_width: line_width,
+                },
+            )))?;
+    
+            // Display synapse weight
+            let mid_x = (x1 + x2) / 2;
+            let mid_y = (y1 + y2) / 2;
+            chart.draw_series(std::iter::once(Text::new(
+                format!("{:.2}", synapse.weight),
+                (mid_x, mid_y),
+                ("sans-serif", 12).into_font(),
+            )))?;
+        }
+    
+        root_area.present()?;
+        Ok(())
+    }
+}
+
