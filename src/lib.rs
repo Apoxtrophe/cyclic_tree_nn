@@ -183,39 +183,39 @@ impl Network {
         let horizontal_spacing = 1.0;
         let vertical_spacing = 1.0;
         for neuron in self.neurons.values() {
-                    let neuron_type = neuron.flag[0];
-                    let mut x_pos = 0.0;
-                    let mut y_pos = 0.0;
-        
-                    // Convert id[0] and id[1] to u16 for calculation
-                    let tree_id = neuron.id[0] as u16;
-                    let node_id1 = neuron.id[1] as u16;
-        
-                    if neuron_type == 1 { // Input neuron (root of a tree)
-                        x_pos = tree_id as f64 * 1.0; // Separate trees horizontally
-                        y_pos = 0.0;
-                    } else if neuron_type == 2 { // Hidden neuron
-                        let depth = get_neuron_height(node_id1 as u8) as f64;
-                        y_pos = depth * vertical_spacing;
-        
-                        let inorder_pos = get_inorder_position(node_id1) as f64;
-                        let max_nodes_at_depth = 2u32.pow(depth as u32) as f64;
-        
-                        // Adjust x_pos within the tree
-                        x_pos = (inorder_pos + 0.5) * (horizontal_spacing / max_nodes_at_depth);
-                        // Shift x_pos based on the tree's position
-                        x_pos += tree_id as f64 * 1.0;
-                    } else if neuron_type == 3 { // Output neuron
-                        x_pos = 255.0 - tree_id as f64;
-                        y_pos = (7.0 + 1.0) * vertical_spacing;
-                    }
-        
-                    // Store positions
-                    neuron_positions.insert(neuron.id, (x_pos, y_pos));
-        
-                    // Debug print
-                    println!("Neuron ID: {:?}, x: {}, y: {}", neuron.id, x_pos, y_pos);
-                }
+            let neuron_type = neuron.flag[0];
+            let mut x_pos = 0.0;
+            let mut y_pos = 0.0;
+
+            // Convert id[0] and id[1] to u16 for calculation
+            let tree_id = neuron.id[0] as u16;
+            let node_id1 = neuron.id[1] as u16;
+
+            if neuron_type == 1 { // Input neuron (root of a tree)
+                x_pos = tree_id as f64 * 1.0; // Separate trees horizontally
+                y_pos = 0.0;
+            } else if neuron_type == 2 { // Hidden neuron
+                let depth = get_neuron_height(node_id1 as u8) as f64;
+                y_pos = depth * vertical_spacing;
+
+                let inorder_pos = get_inorder_position(node_id1) as f64;
+                let max_nodes_at_depth = 2u32.pow(depth as u32) as f64;
+
+                // Adjust x_pos within the tree
+                x_pos = (inorder_pos + 0.5) * (horizontal_spacing / max_nodes_at_depth);
+                // Shift x_pos based on the tree's position
+                x_pos += tree_id as f64 * 1.0;
+            } else if neuron_type == 3 { // Output neuron
+                x_pos = 255.0 - tree_id as f64;
+                y_pos = (7.0 + 1.0) * vertical_spacing;
+            }
+
+            // Store positions
+            neuron_positions.insert(neuron.id, (x_pos, y_pos));
+
+            // Debug print
+            println!("Neuron ID: {:?}, x: {}, y: {}", neuron.id, x_pos, y_pos);
+        }
         
         let mut edge_x = Vec::new();
         let mut edge_y = Vec::new();
