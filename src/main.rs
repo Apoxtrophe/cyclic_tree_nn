@@ -1,26 +1,15 @@
-
 extern crate aster_ml;
 use aster_ml::*;
 
 fn main() {        
     // UH OH! DUPLICATE SYNAPSES!
-    let mut network: Network = Network::new(2, 2);
-    for i in 0..10{
+    let mut network: Network = Network::new(10, 1);
+    for i in 0..120{
         network.genome.create_rand_neuron_child();
+        println!("{}",i);
+        network.genome.display();
     }
-    
+    //network.genome.display();
     network.parse_genome();
-    network.visualize();    
-    network.debug_display();
-    network.genome.debug_display();
-
-    
-    for i in 0..10{
-        network.genome.create_rand_synapse();
-    }
-    network.parse_genome();
-    network.visualize();   
-    network.debug_display();
-    network.genome.debug_display();
-
+    network.genome.visualize();   
 }

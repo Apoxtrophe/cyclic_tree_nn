@@ -36,6 +36,10 @@ impl Genome {
     /// Creates a random neuron child by selecting a parent that can have children
     pub fn create_rand_neuron_child(&mut self) {
         let parent_child_pairs = self.get_neuron_candidates();
+        for i in 0..parent_child_pairs.len() {
+            println!("Parent: {:?}, Child: {:?}", parent_child_pairs[i].0, parent_child_pairs[i].1);
+        }
+        println!("____ NEW ____");
         if let Some(selected_pair) = self.select_random_pair(&parent_child_pairs) {
             self.create_neuron(selected_pair);
             self.create_synapse(selected_pair);
@@ -114,14 +118,15 @@ impl Genome {
         }
     }
 
-    /// Finds all possible parent-child pairs for neuron creation
+    /// Finds all possible parent-child pairs for neuron creation, also sort the return type by the height of the parent candidates
     fn get_neuron_candidates(&self) -> Vec<([u8; 2], [u8; 2])> {
-        self.genes
+        let mut candidates: Vec<([u8; 2], [u8; 2])> = self.genes
             .iter()
             .filter(|gene| {
                 let gene_type = GeneType::from_u8(gene.flag[0]);
                 (gene_type == Some(GeneType::Input) || gene_type == Some(GeneType::Hidden))
                     && gene.flag[1] < 2
+                    && gene.id[1] <= 126  // Added condition to exclude genes with parent_id[1] > 127
             })
             .filter_map(|gene| {
                 let parent_id = gene.id;
@@ -132,7 +137,12 @@ impl Genome {
                 };
                 Some((parent_id, child_id))
             })
-            .collect()
+            .collect();
+    
+        // Sort the vector by the second value in the first tuple (parent_id[1])
+        candidates.sort_by_key(|(parent_id, _)| get_neuron_height(parent_id[1]));
+    
+        candidates
     }
 
     /// Finds all possible synapse source neurons

@@ -29,7 +29,7 @@ impl Genome {
 
             match neuron_type {
                 GeneType::Input => {
-                    x_pos = tree_id as f64 * horizontal_spacing;
+                    x_pos = (tree_id as f64 * horizontal_spacing) + 0.5;
                     y_pos = 0.0;
                 }
                 GeneType::Hidden => {
@@ -51,9 +51,6 @@ impl Genome {
 
             // Store positions
             neuron_positions.insert(gene.id, (x_pos, y_pos));
-
-            // Debug print
-            println!("Neuron ID: {:?}, x: {}, y: {}", gene.id, x_pos, y_pos);
         }
 
         // Collect synapses
