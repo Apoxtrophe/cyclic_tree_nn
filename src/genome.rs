@@ -1,291 +1,268 @@
-use crate::{convert_f32_to_id, convert_id_to_f32, Gene, Genome, Neuron};
+use crate::{Gene, GeneType, Genome, SynapseStatus};
 use rand::prelude::*;
 
 // MUTATION FUNCTIONS
 impl Genome {
-    // Finds parents that may have children and gives their ids
-    // Beside that result it also gives the appropriate id of each possible child
+    /// Creates a new Genome with specified numbers of input and output neurons
+    pub fn new(inputs: u16, outputs: u16) -> Self {
+        assert!(inputs <= 256, "Number of inputs must be <= 256");
+        assert!(outputs <= 256, "Number of outputs must be <= 256");
 
+        let mut genes = Vec::with_capacity((inputs + outputs) as usize);
+
+        // Assign unique IDs to input neurons
+        for i in 0..inputs {
+            genes.push(Gene {
+                id: [i as u8, 0],
+                flag: [GeneType::Input.as_u8(), 0],
+                local_data: 0.0,
+                extern_data: 0.0,
+            });
+        }
+
+        // Assign unique IDs to output neurons
+        for i in 0..outputs {
+            genes.push(Gene {
+                id: [255 - i as u8, 0],
+                flag: [GeneType::Output.as_u8(), 0],
+                local_data: 0.0,
+                extern_data: 0.0,
+            });
+        }
+
+        Genome { genes }
+    }
+    
+    /// Creates a random neuron child by selecting a parent that can have children
     pub fn create_rand_neuron_child(&mut self) {
         let parent_child_pairs = self.get_neuron_candidates();
-        if let Some(selected_pair) = self.create_rand_neuron(&parent_child_pairs) {
+        if let Some(selected_pair) = self.select_random_pair(&parent_child_pairs) {
             self.create_neuron(selected_pair);
             self.create_synapse(selected_pair);
+            self.sort_genes();
         }
-        self.genes.sort_by_key(|k| k.id)
     }
-    // Select a random input or hidden neuron to add a synapse connection to
+    
+    /// Creates a random synapse between neurons
     pub fn create_rand_synapse(&mut self) {
-        let mut rng = thread_rng();
-        let mut possible_neuron_source_ids = Vec::new();
-        for gene in &mut self.genes {
-            if gene.flag[0] == 1 || gene.flag[0] == 2 {
-                possible_neuron_source_ids.push(gene.id);
+        if let Some(source_id) = self.select_random(&self.get_possible_synapse_sources()) {
+            let possible_targets = self.get_synapse_candidates(source_id);
+            if let Some(target_id) = self.select_random(&possible_targets) {
+                self.create_synapse((source_id, target_id));
+                self.sort_genes();
             }
         }
-        println!("Possible Source Id's {:?}", possible_neuron_source_ids);
-        if possible_neuron_source_ids.is_empty() {
-            return;
-        }
-        let selected = rng.gen_range(0..possible_neuron_source_ids.len());
-        let source_id = possible_neuron_source_ids[selected];
-        println!("source_id: {:?}", source_id);
-        
-        let possible_neuron_target_ids = self.get_synapse_candidates(source_id);
-        println!("Possible Target Id's {:?}", possible_neuron_target_ids);
-        if possible_neuron_target_ids.is_empty() {
-            return;
-        }
-        
-        
-        let target_selected = rng.gen_range(0..possible_neuron_target_ids.len());
-        let target_id = possible_neuron_target_ids[target_selected];
-        
-        println!("FROM_ID: {:?} TO_ID: {:?}", source_id, target_id);
-        self.create_synapse((source_id, target_id));
-        self.genes.sort_by_key(|k| k.id)
     }
-    /// Disables a random enabled synapse by changing its flag from [10, 10] to [10, 11]
+    
+    /// Disables a random enabled synapse
     pub fn disable_random_synapse(&mut self) {
-        // Collect indices of all enabled synapses
-        let enabled_synapse_indices: Vec<usize> = self.genes.iter()
-            .enumerate()
-            .filter(|(_, gene)| gene.flag == [10, 10])
-            .map(|(index, _)| index)
-            .collect();
-
-        if enabled_synapse_indices.is_empty() {
+        if let Some(index) = self.select_random_index(&self.get_synapse_indices(SynapseStatus::Enabled)) {
+            self.genes[index].flag[1] = SynapseStatus::Disabled as u8;
+            println!("Disabled synapse at index {}", index);
+        } else {
             println!("No enabled synapses to disable.");
-            return;
         }
-
-        let mut rng = thread_rng();
-        // Select a random enabled synapse
-        let selected_index = enabled_synapse_indices[rng.gen_range(0..enabled_synapse_indices.len())];
-
-        // Disable the synapse
-        self.genes[selected_index].flag = [10, 11];
-        println!("Disabled synapse at index {}", selected_index);
     }
+    /// Enables a random disabled synapse
     pub fn enable_random_synapse(&mut self) {
-        // Collect indices of all disabled synapses
-        let disabled_synapse_indices: Vec<usize> = self.genes.iter()
-            .enumerate()
-            .filter(|(_, gene)| gene.flag == [10, 11])
-            .map(|(index, _)| index)
-            .collect();
-
-        if disabled_synapse_indices.is_empty() {
+        if let Some(index) = self.select_random_index(&self.get_synapse_indices(SynapseStatus::Disabled)) {
+            self.genes[index].flag[1] = SynapseStatus::Enabled as u8;
+            println!("Enabled synapse at index {}", index);
+        } else {
             println!("No disabled synapses to enable.");
-            return;
         }
-
-        let mut rng = thread_rng();
-        // Select a random disabled synapse
-        let selected_index = disabled_synapse_indices[rng.gen_range(0..disabled_synapse_indices.len())];
-
-        // Enable the synapse
-        self.genes[selected_index].flag = [10, 10];
-        println!("Enabled synapse at index {}", selected_index);
+    }
+    /// Helper function to sort genes by their IDs
+    fn sort_genes(&mut self) {
+        self.genes.sort_by_key(|k| k.id);
     }
 }
 
-// HELPER FUNCTIONS
-
+// Helper functions for Genome
 impl Genome {
-    // Create neuron from parent-child pair
+    /// Creates a neuron from a parent-child pair
     fn create_neuron(&mut self, selected_pair: ([u8; 2], [u8; 2])) {
-        for gene in &mut self.genes {
-            if gene.id == selected_pair.0 && gene.flag[0] <= 3 {
-                gene.flag[1] += 1;
-            }
+        if let Some((parent_index, parent_gene)) = self.find_gene_by_id_and_type(selected_pair.0, &[GeneType::Input, GeneType::Hidden, GeneType::Output]) {
+            parent_gene.flag[1] += 1;
+            self.genes.insert(
+                parent_index + 1,
+                Gene {
+                    id: selected_pair.1,
+                    flag: [GeneType::Hidden.as_u8(), 0],
+                    local_data: 0.0,
+                    extern_data: 0.0,
+                },
+            );
+        } else {
+            println!("Parent gene not found or invalid type.");
         }
+    }
 
-        let mut parent_index = 0;
-        for i in 0..self.genes.len() {
-            if self.genes[i].id == selected_pair.0 {
-                parent_index = i;
-                break;
-            }
-        }
-
-        self.genes.insert(
-            parent_index + 1,
-            Gene {
-                id: selected_pair.1,
-                flag: [2, 0],
-                local_data: 0.0,
+    /// Creates a synapse between two neurons
+    fn create_synapse(&mut self, selected_pair: ([u8; 2], [u8; 2])) {
+        let (from_id, to_id) = selected_pair;
+        if let Some((index, _)) = self.find_gene_by_id(from_id) {
+            let new_synapse = Gene {
+                id: from_id,
+                flag: [GeneType::Synapse.as_u8(), SynapseStatus::Enabled as u8],
+                local_data: convert_id_to_f32(to_id),
                 extern_data: 0.0,
-            },
-        );
-    }
-    // Find a valid, random parent-child pair
-    fn create_rand_neuron(
-        &self,
-        parent_child_pairs: &Vec<([u8; 2], [u8; 2])>,
-    ) -> Option<([u8; 2], [u8; 2])> {
-        if parent_child_pairs.is_empty() {
-            return None;
+            };
+            self.genes.insert(index + 1, new_synapse);
+        } else {
+            println!("Source neuron not found.");
         }
-        let mut rng = thread_rng();
-        let selected = rng.gen_range(0..parent_child_pairs.len());
-        Some(parent_child_pairs[selected])
     }
-    // Find all possible parent-child pairs
-    pub fn get_neuron_candidates(&self) -> Vec<([u8; 2], [u8; 2])> {
-        let mut available_ids: Vec<([u8; 2], [u8; 2])> = Vec::new();
-        for gene in &self.genes {
-            let mut pair: ([u8; 2], [u8; 2]) = ([0, 0], [0, 0]);
-            if gene.flag[0] <= 2 && gene.flag[1] < 2 {
-                pair.0 = gene.id;
+
+    /// Finds all possible parent-child pairs for neuron creation
+    fn get_neuron_candidates(&self) -> Vec<([u8; 2], [u8; 2])> {
+        self.genes
+            .iter()
+            .filter(|gene| {
+                let gene_type = GeneType::from_u8(gene.flag[0]);
+                (gene_type == Some(GeneType::Input) || gene_type == Some(GeneType::Hidden))
+                    && gene.flag[1] < 2
+            })
+            .filter_map(|gene| {
+                let parent_id = gene.id;
                 let child_id = match gene.flag[1] {
                     0 => [gene.id[0], 2 * gene.id[1] + 1],
                     1 => [gene.id[0], 2 * gene.id[1] + 2],
-                    _ => continue,
+                    _ => return None,
                 };
-                pair.1 = child_id;
-                available_ids.push(pair);
-            }
-        }
-        available_ids
-    }
-    // Create a synapse between two neurons
-    pub fn create_synapse(&mut self, selected_pair: ([u8; 2], [u8; 2])) {
-        let from_id = selected_pair.0;
-        let to_id = selected_pair.1;
-        let mut neuron_index = 0;
-        for i in 0..self.genes.len() {
-            if self.genes[i].id == from_id {
-                neuron_index = i;
-            }
-        }
-        let new_synapse = Gene {
-            id: [from_id[0], from_id[1]],
-            flag: [10, 10],
-            local_data: convert_id_to_f32(to_id),
-            extern_data: 0.0,
-        };
-        self.genes.insert(neuron_index + 1 , new_synapse);
+                Some((parent_id, child_id))
+            })
+            .collect()
     }
 
-    // For any given neuron id, find all possible synapse candidates
-    pub fn get_synapse_candidates(
-        &self,
-        neuron_id: [u8; 2]
-    ) -> Vec<[u8; 2]> {
-        let neuron_height = get_neuron_height(neuron_id[1]);
-        
-        let mut available_ids: Vec<[u8; 2]> = Vec::new();
-        for gene in &self.genes {
-            if gene.flag[0] == 3 {
-                available_ids.push(gene.id);
-            }
-            
-            let height = get_neuron_height(gene.id[1]);
-            if self.are_connected((neuron_id, gene.id)) {
-                println!("ALREADY CONNECTED");
-                continue;
-            }
-            if height <= neuron_height {
-                println!("TOO HIGH");
-                continue;
-            }
-            if gene.id == neuron_id {
-                println!("SAME ID");
-                continue;
-            }
-            if gene.flag[0] == 10 {
-                println!("ALREADY SYNAPSE");
-                continue;
-            }
-
-            available_ids.push(gene.id);
-        }
-        println!("AVAILABLE IDS: {:?}", available_ids);
-        available_ids
+    /// Finds all possible synapse source neurons
+    fn get_possible_synapse_sources(&self) -> Vec<[u8; 2]> {
+        self.genes
+            .iter()
+            .filter(|gene| {
+                let gene_type = GeneType::from_u8(gene.flag[0]);
+                gene_type == Some(GeneType::Input) || gene_type == Some(GeneType::Hidden)
+            })
+            .map(|gene| gene.id)
+            .collect()
     }
-    // Are any two given nodes connected via a synapse???
-    pub fn are_connected (
-        &self,
-        selected_pair: ([u8; 2], [u8; 2]),
-    ) -> bool {
-        for gene in &self.genes {
-            if gene.id == selected_pair.0 {
-                if gene.flag[0] == 10 {
-                    return true;
-                }
-            }
-        }
-        return false;
+
+    /// Finds all possible synapse target neurons for a given source neuron
+    fn get_synapse_candidates(&self, neuron_id: [u8; 2]) -> Vec<[u8; 2]> {
+        let source_height = get_neuron_height(neuron_id[1]);
+
+        self.genes
+            .iter()
+            .filter(|gene| {
+                gene.id != neuron_id
+                    && GeneType::from_u8(gene.flag[0]) != Some(GeneType::Synapse)
+                    && !self.are_connected(neuron_id, gene.id)
+                    && (get_neuron_height(gene.id[1]) > source_height || gene.flag[0] == 3)
+            })
+            .map(|gene| gene.id)
+            .collect()
+    }
+
+    /// Checks if two neurons are already connected via a synapse
+    fn are_connected(&self, from_id: [u8; 2], to_id: [u8; 2]) -> bool {
+        self.find_synapse(from_id, to_id).is_some()
+    }
+
+    /// Selects a random element from a vector
+    fn select_random<T: Clone>(&self, items: &[T]) -> Option<T> {
+        let mut rng = thread_rng();
+        items.choose(&mut rng).cloned()
+    }
+
+    /// Selects a random index from a vector of indices
+    fn select_random_index(&self, indices: &[usize]) -> Option<usize> {
+        let mut rng = thread_rng();
+        indices.choose(&mut rng).cloned()
+    }
+
+    /// Selects a random parent-child pair
+    fn select_random_pair(&self, pairs: &[([u8; 2], [u8; 2])]) -> Option<([u8; 2], [u8; 2])> {
+        let mut rng = thread_rng();
+        pairs.choose(&mut rng).copied()
+    }
+
+    /// Finds a gene by its ID
+    fn find_gene_by_id(&mut self, id: [u8; 2]) -> Option<(usize, &mut Gene)> {
+        self.genes.iter_mut().enumerate().find(|(_, gene)| gene.id == id)
+    }
+
+    /// Finds a gene by its ID and type
+    fn find_gene_by_id_and_type(&mut self, id: [u8; 2], types: &[GeneType]) -> Option<(usize, &mut Gene)> {
+        self.genes
+            .iter_mut()
+            .enumerate()
+            .find(|(_, gene)| gene.id == id && types.contains(&GeneType::from_u8(gene.flag[0]).unwrap()))
+    }
+
+    /// Finds a synapse between two neurons
+    fn find_synapse(&self, from_id: [u8; 2], to_id: [u8; 2]) -> Option<&Gene> {
+        let to_id_f32 = convert_id_to_f32(to_id);
+        self.genes.iter().find(|gene| {
+            gene.id == from_id
+                && GeneType::from_u8(gene.flag[0]) == Some(GeneType::Synapse)
+                && gene.local_data == to_id_f32
+        })
+    }
+
+    /// Gets indices of synapses based on their status (enabled or disabled)
+    fn get_synapse_indices(&self, status: SynapseStatus) -> Vec<usize> {
+        self.genes
+            .iter()
+            .enumerate()
+            .filter(|(_, gene)| {
+                GeneType::from_u8(gene.flag[0]) == Some(GeneType::Synapse)
+                    && gene.flag[1] == status as u8
+            })
+            .map(|(index, _)| index)
+            .collect()
     }
 }
 
-// Debug display for genome
-impl Genome {
-    pub fn display(&self) {
-        println!("################ GENOME DISPLAY ################");
-        for gene in &self.genes {
-            let seed = gene.id[0];
-            let id = gene.id[1];
-            let flag1 = gene.flag[0];
-            let flag2 = gene.flag[1];
-            let lcl_data = gene.local_data;
-            let ext_data = gene.extern_data;
-            if flag1 == 1 {
-                println!(
-                    "INPUT NEURON - - - - - # ID: {:?} # CHILDREN: {} # BIAS: {}",
-                    gene.id, flag2, lcl_data
-                );
-            }
-            if flag1 == 2 {
-                println!(
-                    "L HIDDEN NEURON- - - - # ID: {:?} # CHILDREN: {} # BIAS: {}",
-                    gene.id, flag2, lcl_data
-                );
-            }
-            if flag1 == 3 {
-                println!(
-                    "OUTPUT NEURON- - - - - # ID: {:?} # CHILDREN: {} # BIAS: {}",
-                    gene.id, flag2, lcl_data
-                );
-            }
-            if flag1 == 10 {
-                let mut enabled = "True";
-                if flag2 == 11 {
-                    enabled = "False";
-                }
-                let to_id = convert_f32_to_id(lcl_data);
-                println!("  L SYNAPSE- - - - - - # ID_FROM {:?} # ID_TO {:?} # WEIGHT {} # ENABLED: [{}]", gene.id, to_id, ext_data, enabled)
-            }
-        }
-        println!("################################################\n");
-    }
-    pub fn debug_display(&self) {
-        println!("DEBUG DISPLAY");
-        for gene in &self.genes {
-            println!("{:?}", gene);
-        }
-    }
+// Utility functions
+/// Converts an ID ([u8; 2]) to f32
+pub fn convert_id_to_f32(id: [u8; 2]) -> f32 {
+    u16::from_be_bytes(id) as f32
 }
 
-pub fn get_neuron_height(
-    neuron_flag1 : u8
-    ) -> u8 {
-    let height_limits = [
-        1,    // Height 0: 1 node
-        3,    // Height 1: 3 nodes total
-        7,    // Height 2: 7 nodes total
-        15,   // Height 3: 15 nodes total
-        31,   // Height 4: 31 nodes total
-        63,   // Height 5: 63 nodes total
-        127,  // Height 6: 127 nodes total
-        255,  // Height 7: 255 nodes total
-    ];
-    
-    for (height, &limit) in height_limits.iter().enumerate() {
-        if neuron_flag1 < limit {
-            return height as u8;
-        }
+/// Converts f32 back to an ID ([u8; 2])
+pub fn convert_f32_to_id(value: f32) -> [u8; 2] {
+    (value as u16).to_be_bytes()
+}
+
+/// Calculates the height of a neuron in the binary tree based on its position
+pub fn get_neuron_height(position: u8) -> u32 {
+    let mut height = 0;
+    let mut index = position as u32;
+    while index > 0 {
+        index = (index - 1) / 2;
+        height += 1;
     }
-    height_limits.len() as u8 - 1
+    height
+}
+
+
+pub fn get_inorder_position(id1: u16) -> u16 {
+    // Base case: root node
+    if id1 == 0 {
+        return 0;
+    }
+
+    // Recursive case
+    let parent_id1 = (id1 - 1) / 2;
+    let is_left_child = id1 % 2 == 1;
+
+    let parent_position = get_inorder_position(parent_id1);
+
+    if is_left_child {
+        // Left child: position is parent's position * 2
+        return parent_position * 2;
+    } else {
+        // Right child: position is parent's position * 2 + 1
+        return parent_position * 2 + 1;
+    }
 }

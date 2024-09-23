@@ -2,9 +2,59 @@ use core::f64;
 use std::collections::HashMap;
 pub mod genome;
 pub use genome::*;
+
+pub mod visuals;
+
 use plotly::common::Mode;
 use plotly::{Plot, Scatter};
 
+
+// Enums and constants for better readability
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum GeneType {
+    Input = 1,
+    Hidden = 2,
+    Output = 3,
+    Synapse = 10,
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+enum SynapseStatus {
+    Enabled = 10,
+    Disabled = 11,
+}
+
+// Helper functions to convert between GeneType and u8
+impl GeneType {
+    fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            1 => Some(GeneType::Input),
+            2 => Some(GeneType::Hidden),
+            3 => Some(GeneType::Output),
+            10 => Some(GeneType::Synapse),
+            _ => None,
+        }
+    }
+
+    fn as_u8(&self) -> u8 {
+        *self as u8
+    }
+}
+
+// The Gene struct represents neurons and synapses in the genome
+#[derive(Debug, Clone)]
+pub struct Gene {
+    pub id: [u8; 2],    // id[0]: seed (input/output neuron number), id[1]: position in the tree
+    pub flag: [u8; 2],  // flag[0]: GeneType, flag[1]: additional info (e.g., child count)
+    pub local_data: f32,
+    pub extern_data: f32,
+}
+
+// Genome is a blueprint for the network, later parsed into neurons and synapses
+#[derive(Debug)]
+pub struct Genome {
+    pub genes: Vec<Gene>,
+}
 
 #[derive(Debug, Clone)]
 pub struct Neuron {
@@ -18,16 +68,8 @@ pub struct Neuron {
 pub struct Synapse {
     pub id: [u8; 2],
     pub flag: [u8; 2],
-    pub destination: [u8; 2], // Converted to and from f32 :(
+    pub destination: [u8; 2],
     pub weight: f32,
-}
-
-#[derive(Debug, Clone)]
-pub struct Gene {
-    pub id: [u8; 2],
-    pub flag: [u8; 2],
-    pub local_data: f32,
-    pub extern_data: f32,
 }
 
 // Main network structure with genome, neurons, and synapses
@@ -36,40 +78,6 @@ pub struct Network {
     pub neurons: HashMap<[u8;2], Neuron>,
     pub synapses: HashMap<([u8;2],[u8;2]), Synapse>,
 }
-
-// Genome structure with Vec of Genes for easy search and manipulation
-#[derive(Debug)]
-pub struct Genome {
-    pub genes: Vec<Gene>,
-}
-
-impl Genome {
-    // Create a new Genome with inputs and outputs
-    pub fn new(inputs: u16, outputs: u16) -> Self {
-        let mut genes = Vec::new();
-        for i in 0..inputs {
-            genes.push(Gene {
-                id: [i as u8, 0],
-                flag: [1, 0],
-                local_data: 0.0,
-                extern_data: 0.0,
-            });
-        }
-        for i in 0..outputs {
-            genes.push(Gene {
-                id: [255 - i as u8, 0],
-                flag: [3, 0],
-                local_data: 0.0,
-                extern_data: 0.0,
-            });
-        }
-
-        Genome { genes }
-
-    }    
-}
-
-
 
 impl Network {
     pub fn new(
@@ -267,39 +275,3 @@ impl Network {
     }
 }
 
-pub fn convert_id_to_f32 (
-    id: [u8; 2],
-) -> f32 {
-    let combined_value: u16 = u16::from_le_bytes(id); // Combine into u16
-    let float_value: f32 = combined_value as f32; // Convert to f32
-    float_value
-}
-
-pub fn convert_f32_to_id (
-    float: f32,
-) -> [u8;2] {
-    let combined_value_back: u16 = float as u16; // Convert back to u16
-    let byte_array_back: [u8; 2] = combined_value_back.to_le_bytes(); // Split back to [u8; 2]
-    byte_array_back
-}
-
-fn get_inorder_position(id1: u16) -> u16 {
-    // Base case: root node
-    if id1 == 0 {
-        return 0;
-    }
-
-    // Recursive case
-    let parent_id1 = (id1 - 1) / 2;
-    let is_left_child = id1 % 2 == 1;
-
-    let parent_position = get_inorder_position(parent_id1);
-
-    if is_left_child {
-        // Left child: position is parent's position * 2
-        return parent_position * 2;
-    } else {
-        // Right child: position is parent's position * 2 + 1
-        return parent_position * 2 + 1;
-    }
-}
