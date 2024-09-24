@@ -34,12 +34,8 @@ impl Genome {
     }
     
     /// Creates a random neuron child by selecting a parent that can have children
-    pub fn create_rand_neuron_child(&mut self) {
+    pub fn random_child(&mut self) {
         let parent_child_pairs = self.get_neuron_candidates();
-        for i in 0..parent_child_pairs.len() {
-            println!("Parent: {:?}, Child: {:?}", parent_child_pairs[i].0, parent_child_pairs[i].1);
-        }
-        println!("____ NEW ____");
         if let Some(selected_pair) = self.select_random_pair(&parent_child_pairs) {
             self.create_neuron(selected_pair);
             self.create_synapse(selected_pair);
@@ -47,8 +43,24 @@ impl Genome {
         }
     }
     
+    pub fn rand_connected_child (
+        &mut self,
+    ) {
+        let parent_child_pairs = self.get_neuron_candidates();
+        if let Some(selected_pair) = self.select_random_pair(&parent_child_pairs) {
+            self.create_neuron(selected_pair);
+            self.create_synapse(selected_pair);
+            let possible_targets = self.get_synapse_candidates(selected_pair.1);
+            if let Some(target_id) = self.select_random(&possible_targets) {
+                self.create_synapse((selected_pair.1, target_id));
+            }
+            self.sort_genes();
+
+        }
+    }
+    
     /// Creates a random synapse between neurons
-    pub fn create_rand_synapse(&mut self) {
+    pub fn random_synapse(&mut self) {
         if let Some(source_id) = self.select_random(&self.get_possible_synapse_sources()) {
             let possible_targets = self.get_synapse_candidates(source_id);
             if let Some(target_id) = self.select_random(&possible_targets) {
@@ -76,6 +88,24 @@ impl Genome {
             println!("No disabled synapses to enable.");
         }
     }
+    
+    /// Removes a random synapse that is disabled. If the destination or source neuourns have 1 or 0 synapses after this occurs, they will be removed as well. 
+    pub fn remove_random_disabled_synapse(
+        &mut self,
+    ) {
+        let mut source_target_ids: Vec<([u8;2], [u8;2])> = Vec::new();
+        for genes in self.genes.iter_mut() {
+            if genes.flag[1] == 11 { // If synapse is disabled
+                let source_id = genes.id;
+                let target_id = convert_f32_to_id(genes.local_data);
+                source_target_ids.push((source_id, target_id));
+            }
+        }
+        if let Some(selected_pair) = self.select_random_pair(&source_target_ids) {
+            self.remove_synapse(selected_pair.0, selected_pair.1);
+        }
+    }
+    
     /// Helper function to sort genes by their IDs
     fn sort_genes(&mut self) {
         self.genes.sort_by_key(|k| k.id);
@@ -84,6 +114,88 @@ impl Genome {
 
 // Helper functions for Genome
 impl Genome {
+    /// Removes a synapse between two neurons.
+    /// If the source or destination neurons become isolated after removal, they are also removed.
+    pub fn remove_synapse(&mut self, from_id: [u8; 2], to_id: [u8; 2]) -> bool {
+        if let Some(index) = self.find_synapse_index(from_id, to_id) {
+            self.genes.remove(index);
+            self.update_parent_child_counts(from_id, to_id);
+            self.remove_neuron_if_isolated(from_id);
+            self.remove_neuron_if_isolated(to_id);
+            println!("Removed synapse from {:?} to {:?}", from_id, to_id);
+            true
+        } else {
+            println!("Synapse from {:?} to {:?} not found.", from_id, to_id);
+            false
+        }
+    }
+
+    /// Updates the child count of the parent neuron after synapse removal.
+    fn update_parent_child_counts(&mut self, from_id: [u8; 2], _to_id: [u8; 2]) {
+        if let Some((_, parent_gene)) = self.find_gene_by_id_and_type_mut(
+            from_id,
+            &[GeneType::Input, GeneType::Hidden],
+        ) {
+            if parent_gene.flag[1] > 0 {
+                parent_gene.flag[1] -= 1;
+            }
+        }
+    }
+
+    /// Removes a neuron if it has no incoming or outgoing synapses and is not an Input or Output neuron.
+    fn remove_neuron_if_isolated(&mut self, neuron_id: [u8; 2]) {
+        if let Some(gene_type) = self.get_gene_type(neuron_id) {
+            if gene_type == GeneType::Input || gene_type == GeneType::Output {
+                return;
+            }
+        }
+
+        let has_incoming = self.genes.iter().any(|gene| {
+            GeneType::from_u8(gene.flag[0]) == Some(GeneType::Synapse)
+                && convert_f32_to_id(gene.local_data) == neuron_id
+        });
+
+        let has_outgoing = self.genes.iter().any(|gene| {
+            gene.id == neuron_id && GeneType::from_u8(gene.flag[0]) == Some(GeneType::Synapse)
+        });
+
+        if !has_incoming && !has_outgoing {
+            self.genes.retain(|gene| gene.id != neuron_id);
+            println!("Removed isolated neuron {:?}", neuron_id);
+        }
+    }
+
+    /// Helper function to find the index of a synapse in the genes vector.
+    fn find_synapse_index(&self, from_id: [u8; 2], to_id: [u8; 2]) -> Option<usize> {
+        let to_id_f32 = convert_id_to_f32(to_id);
+        self.genes.iter().position(|gene| {
+            gene.id == from_id
+                && GeneType::from_u8(gene.flag[0]) == Some(GeneType::Synapse)
+                && gene.local_data == to_id_f32
+        })
+    }
+
+    /// Helper function to get the gene type of a neuron.
+    fn get_gene_type(&self, neuron_id: [u8; 2]) -> Option<GeneType> {
+        self.genes
+            .iter()
+            .find(|gene| gene.id == neuron_id)
+            .and_then(|gene| GeneType::from_u8(gene.flag[0]))
+    }
+
+    /// Helper function to find a gene by its ID and type (mutable version).
+    fn find_gene_by_id_and_type_mut(
+        &mut self,
+        id: [u8; 2],
+        types: &[GeneType],
+    ) -> Option<(usize, &mut Gene)> {
+        self.genes
+            .iter_mut()
+            .enumerate()
+            .find(|(_, gene)| {
+                gene.id == id && types.contains(&GeneType::from_u8(gene.flag[0]).unwrap())
+            })
+    }
     /// Creates a neuron from a parent-child pair
     fn create_neuron(&mut self, selected_pair: ([u8; 2], [u8; 2])) {
         if let Some((parent_index, parent_gene)) = self.find_gene_by_id_and_type(selected_pair.0, &[GeneType::Input, GeneType::Hidden, GeneType::Output]) {
@@ -144,7 +256,7 @@ impl Genome {
     
         candidates
     }
-
+    
     /// Finds all possible synapse source neurons
     fn get_possible_synapse_sources(&self) -> Vec<[u8; 2]> {
         self.genes

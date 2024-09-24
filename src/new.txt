@@ -24,3 +24,16 @@ B = 11 ### disabled
 5. 32   63
 6. 64   127
 7. 128  255
+
+MUTATION
+add random neuron
+  add new random synapse?
+add random synapse
+disable random synapse
+enable random synapse
+remove synapse
+    also remove that neuron with less than 2 synapses. potencially removing 2 synapses
+
+if I disable a random synapse and it survives to next generation
+    then it will be remove. It is not very beneficial
+    

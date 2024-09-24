@@ -217,4 +217,98 @@ impl Genome {
             println!("{:?}", gene);
         }
     }
+    pub fn get_complexity(
+        &self,
+    ) -> f32 {
+        let mut hidden_nuerons = 0;
+        let mut input_nuerons = 0;
+        for gene in &self.genes {
+            if GeneType::from_u8(gene.flag[0]) == Some(GeneType::Hidden) {
+                hidden_nuerons += 1;
+            }
+            if GeneType::from_u8(gene.flag[0]) == Some(GeneType::Input) {
+                input_nuerons += 1;
+            }
+        }
+        let total_possible_neurons = input_nuerons * 255;
+        let complexity = (hidden_nuerons as f32 / total_possible_neurons as f32) * 100.0;
+        complexity 
+    }
+    
+    /// Outputs statistics about the genome, including counts of neurons and synapses.
+    pub fn statistics(&self) {
+        let mut input_neurons = 0;
+        let mut hidden_neurons = 0;
+        let mut output_neurons = 0;
+        let mut enabled_synapses = 0;
+        let mut disabled_synapses = 0;
+
+        // Optional: Collect neuron IDs and synapse connections for detailed statistics
+        let mut neuron_ids = Vec::new();
+        let mut synapse_connections = Vec::new();
+
+        for gene in &self.genes {
+            match GeneType::from_u8(gene.flag[0]) {
+                Some(GeneType::Input) => {
+                    input_neurons += 1;
+                    neuron_ids.push((gene.id, "Input"));
+                }
+                Some(GeneType::Hidden) => {
+                    hidden_neurons += 1;
+                    neuron_ids.push((gene.id, "Hidden"));
+                }
+                Some(GeneType::Output) => {
+                    output_neurons += 1;
+                    neuron_ids.push((gene.id, "Output"));
+                }
+                Some(GeneType::Synapse) => {
+                    match SynapseStatus::from_u8(gene.flag[1]) {
+                        Some(SynapseStatus::Enabled) => {
+                            enabled_synapses += 1;
+                        }
+                        Some(SynapseStatus::Disabled) => {
+                            disabled_synapses += 1;
+                        }
+                        None => {}
+                    }
+                    let destination_id = convert_f32_to_id(gene.local_data);
+                    synapse_connections.push((gene.id, destination_id, gene.flag[1]));
+                }
+                None => {}
+            }
+        }
+
+        let total_neurons = input_neurons + hidden_neurons + output_neurons;
+        let total_synapses = enabled_synapses + disabled_synapses;
+
+        println!("Genome Statistics:");
+        println!("------------------");
+        println!("Total neurons: {}", total_neurons);
+        println!("  Input neurons: {}", input_neurons);
+        println!("  Hidden neurons: {}", hidden_neurons);
+        println!("  Output neurons: {}", output_neurons);
+        println!("Total synapses: {}", total_synapses);
+        println!("  Enabled synapses: {}", enabled_synapses);
+        println!("  Disabled synapses: {}", disabled_synapses);
+
+        // Detailed Neuron IDs
+        println!("\nNeuron IDs and Types:");
+        for (id, neuron_type) in &neuron_ids {
+            println!("  ID: {:?}, Type: {}", id, neuron_type);
+        }
+
+        // Detailed Synapse Connections
+        println!("\nSynapse Connections (source -> destination) [Status]:");
+        for (from_id, to_id, status) in &synapse_connections {
+            let status_str = match SynapseStatus::from_u8(*status) {
+                Some(SynapseStatus::Enabled) => "Enabled",
+                Some(SynapseStatus::Disabled) => "Disabled",
+                None => "Unknown",
+            };
+            println!(
+                "  {:?} -> {:?} [{}]",
+                from_id, to_id, status_str
+            );
+        }
+    }
 }

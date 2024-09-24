@@ -25,6 +25,16 @@ enum SynapseStatus {
     Disabled = 11,
 }
 
+impl SynapseStatus {
+    fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            10 => Some(SynapseStatus::Enabled),
+            11 => Some(SynapseStatus::Disabled),
+            _ => None,
+        }
+    }
+}
+
 // Helper functions to convert between GeneType and u8
 impl GeneType {
     fn from_u8(value: u8) -> Option<Self> {
