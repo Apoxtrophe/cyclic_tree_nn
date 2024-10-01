@@ -67,6 +67,7 @@ pub struct Gene {
 #[derive(Debug)]
 pub struct Genome {
     pub genes: Vec<Gene>,
+    pub config: MutationConfig,
 }
 
 #[derive(Debug, Clone)]

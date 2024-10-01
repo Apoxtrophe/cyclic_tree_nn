@@ -1,5 +1,23 @@
+use std::collections::HashMap;
+
 use crate::{Gene, GeneType, Genome, SynapseStatus};
 use rand::prelude::*;
+
+#[derive(Debug)]
+pub struct MutationConfig {
+    pub connection_bias: usize,
+    pub inclusion_probability: f32,
+}
+
+impl Default for MutationConfig {
+    fn default() -> Self {
+        MutationConfig {
+            connection_bias: 4,
+            inclusion_probability: 0.5,
+        }
+    }
+}
+
 
 // MUTATION FUNCTIONS
 impl Genome {
@@ -9,7 +27,7 @@ impl Genome {
         assert!(outputs <= 256, "Number of outputs must be <= 256");
 
         let mut genes = Vec::with_capacity((inputs + outputs) as usize);
-
+        let mutation_config = MutationConfig::default();
         // Assign unique IDs to input neurons
         for i in 0..inputs {
             genes.push(Gene {
@@ -30,7 +48,10 @@ impl Genome {
             });
         }
 
-        Genome { genes }
+        Genome {
+            genes,
+            config: mutation_config,
+        }
     }
     
     /// Creates a random neuron child by selecting a parent that can have children
@@ -105,6 +126,29 @@ impl Genome {
         if let Some(selected_pair) = self.select_random_pair(&source_target_ids) {
             self.remove_synapse(selected_pair.0, selected_pair.1);
         }
+    }
+    pub fn crossover(
+        &self,
+        individual2: &Genome,
+    ) {
+        let mut neurons1: Vec<[u8;2]> = Vec::new();
+        let mut neurons2: Vec<[u8;2]> = Vec::new();
+        
+        for gene in self.genes.iter() {
+            if gene.flag[0] <= 3 {
+                neurons1.push(gene.id);
+            }
+        }
+        
+        for gene in individual2.genes.iter() {
+            if gene.flag[0] <= 3 {
+                neurons2.push(gene.id);
+            }
+        }
+
+        
+        println!("Length: {:?}", neurons1);
+    
     }
     
     /// Helper function to sort genes by their IDs
@@ -231,6 +275,7 @@ impl Genome {
         }
     }
 
+
     /// Finds all possible parent-child pairs for neuron creation, also sort the return type by the height of the parent candidates
     fn get_neuron_candidates(&self) -> Vec<([u8; 2], [u8; 2])> {
         let mut candidates: Vec<([u8; 2], [u8; 2])> = self.genes
@@ -270,11 +315,10 @@ impl Genome {
             .collect()
     }
 
-    /// Finds all possible synapse target neurons for a given source neuron
-    fn get_synapse_candidates(&self, neuron_id: [u8; 2]) -> Vec<[u8; 2]> {
+    pub fn get_synapse_candidates(&self, neuron_id: [u8; 2]) -> Vec<[u8; 2]> {
         let source_height = get_neuron_height(neuron_id[1]);
-
-        self.genes
+    
+        let mut candidates = self.genes
             .iter()
             .filter(|gene| {
                 gene.id != neuron_id
@@ -283,18 +327,32 @@ impl Genome {
                     && (get_neuron_height(gene.id[1]) > source_height || gene.flag[0] == 3)
             })
             .map(|gene| gene.id)
-            .collect()
+            .collect::<Vec<_>>();
+        
+        candidates
     }
 
     /// Checks if two neurons are already connected via a synapse
-    fn are_connected(&self, from_id: [u8; 2], to_id: [u8; 2]) -> bool {
-        self.find_synapse(from_id, to_id).is_some()
+    pub fn are_connected(&self, from_id: [u8; 2], to_id: [u8; 2]) -> bool {
+        if self.find_synapse(from_id, to_id).is_some() {
+            return true;
+        } 
+        if self.find_synapse(to_id, from_id).is_some() {
+            return true;
+        } 
+        return false; 
     }
 
     /// Selects a random element from a vector
     fn select_random<T: Clone>(&self, items: &[T]) -> Option<T> {
         let mut rng = thread_rng();
         items.choose(&mut rng).cloned()
+    }
+    
+    fn select_random_weighted<T: Clone> (&self, items: &[T]) -> Option<T> {
+        let mut rng = thread_rng();
+        let limit = self.config.connection_bias.min(items.len());
+        items[0..limit].choose(&mut rng).cloned()
     }
 
     /// Selects a random index from a vector of indices
@@ -388,4 +446,14 @@ pub fn get_inorder_position(id1: u16) -> u16 {
         // Right child: position is parent's position * 2 + 1
         return parent_position * 2 + 1;
     }
+}
+
+pub fn get_random_element_from_first_x<T: Copy>(arr: &[T], x: usize) -> Option<T> {
+    if x > arr.len() || x == 0 {
+        return None; // Handle the case where x is out of bounds or zero
+    }
+    
+    let mut rng = rand::thread_rng();
+    let random_index = rng.gen_range(0..x);
+    Some(arr[random_index])
 }
