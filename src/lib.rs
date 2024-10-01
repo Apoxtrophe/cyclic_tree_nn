@@ -19,6 +19,8 @@ enum GeneType {
     Synapse = 10,
 }
 
+
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum SynapseStatus {
     Enabled = 10,

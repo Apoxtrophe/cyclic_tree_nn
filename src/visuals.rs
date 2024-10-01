@@ -230,7 +230,7 @@ impl Genome {
                 input_nuerons += 1;
             }
         }
-        let total_possible_neurons = input_nuerons * 255;
+        let total_possible_neurons = input_nuerons * 254;
         let complexity = (hidden_nuerons as f32 / total_possible_neurons as f32) * 100.0;
         complexity 
     }
@@ -277,12 +277,12 @@ impl Genome {
                 None => {}
             }
         }
-
+        
         let total_neurons = input_neurons + hidden_neurons + output_neurons;
         let total_synapses = enabled_synapses + disabled_synapses;
-
-        println!("Genome Statistics:");
-        println!("------------------");
+        let complexity = (hidden_neurons as f32 / (254.0 * input_neurons as f32)) * 100.0;
+        
+        println!("##### Genome Statistics #####");
         println!("Total neurons: {}", total_neurons);
         println!("  Input neurons: {}", input_neurons);
         println!("  Hidden neurons: {}", hidden_neurons);
@@ -290,25 +290,7 @@ impl Genome {
         println!("Total synapses: {}", total_synapses);
         println!("  Enabled synapses: {}", enabled_synapses);
         println!("  Disabled synapses: {}", disabled_synapses);
-
-        // Detailed Neuron IDs
-        println!("\nNeuron IDs and Types:");
-        for (id, neuron_type) in &neuron_ids {
-            println!("  ID: {:?}, Type: {}", id, neuron_type);
-        }
-
-        // Detailed Synapse Connections
-        println!("\nSynapse Connections (source -> destination) [Status]:");
-        for (from_id, to_id, status) in &synapse_connections {
-            let status_str = match SynapseStatus::from_u8(*status) {
-                Some(SynapseStatus::Enabled) => "Enabled",
-                Some(SynapseStatus::Disabled) => "Disabled",
-                None => "Unknown",
-            };
-            println!(
-                "  {:?} -> {:?} [{}]",
-                from_id, to_id, status_str
-            );
-        }
+        println!("Complextiy: {} ", self.get_complexity());
+        println!("#############################");
     }
 }

@@ -43,6 +43,7 @@ impl Genome {
         }
     }
     
+    /// Creates a new random neuron child as above, but also connects it to a synapse with a higher height
     pub fn rand_connected_child (
         &mut self,
     ) {
